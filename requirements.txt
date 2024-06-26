@@ -1,4 +1,8 @@
-PyYAML==6.0.1
-requests==2.25.1
-tqdm==4.56.0
-Pygments==2.9.0
+PyYAML~=6.0
+requests~=2.25
+Pygments~=2.9
+tqdm~=4.56
+urllib3<2
+pytest~=8.2
+build~=1.2
+twine~=5.1

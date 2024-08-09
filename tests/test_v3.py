@@ -31,33 +31,63 @@ def test_token_request(token):
     assert token.is_valid()
 
 
-def test_url_1(client):
+def test_freeze_url_1(client):
     response = client.get("https://freeze.42.fr/api/v2/freezes").json()
     assert "items" in response
 
 
-def test_url_2(client):
+def test_freeze_url_2(client):
     response = client.get("/v3/freeze/v2/freezes").json()
     assert "items" in response
 
 
-def test_url_3(client):
+def test_freeze_url_3(client):
     response = client.get("v3/freeze/v2/freezes").json()
     assert "items" in response
 
 
-def test_url_4(client):
+def test_freeze_url_4(client):
     response = client.get("freeze/v2/freezes").json()
     assert "items" in response
 
 
-def test_url_5(client):
+def test_freeze_url_5(client):
     response = client.get("/freeze/v2/freezes").json()
     assert "items" in response
 
 
-def test_url_6(client):
+def test_freeze_url_6(client):
     response = client.get("   freeze/v2/freezes   ").json()
+    assert "items" in response
+
+
+def test_pace_url_1(client):
+    response = client.get("https://pace-system.42.fr/api/v1/paces").json()
+    assert "items" in response
+
+
+def test_pace_url_2(client):
+    response = client.get("/v3/pace-system/v1/paces").json()
+    assert "items" in response
+
+
+def test_pace_url_3(client):
+    response = client.get("v3/pace-system/v1/paces").json()
+    assert "items" in response
+
+
+def test_pace_url_4(client):
+    response = client.get("pace-system/v1/paces").json()
+    assert "items" in response
+
+
+def test_pace_url_5(client):
+    response = client.get("/pace-system/v1/paces").json()
+    assert "items" in response
+
+
+def test_pace_url_6(client):
+    response = client.get("   pace-system/v1/paces   ").json()
     assert "items" in response
 
 
@@ -78,6 +108,11 @@ def test_pages(client):
     assert isinstance(response, list) and len(response) > 0
 
 
-def test_pages_threaded(client):
+def test_freeze_pages_threaded(client):
     response = client.pages_threaded("/v3/freeze/v2/freezes")
+    assert isinstance(response, list) and len(response) > 0
+
+
+def test_pace_pages_threaded_invalid_v2param(client):
+    response = client.pages_threaded("/v3/pace-system/v1/paces")
     assert isinstance(response, list) and len(response) > 0

@@ -143,6 +143,9 @@ class IntraAPIClient:
         if not self.token or not self.token.is_valid():
             self.token.request_token()
 
+        if self.token.api_version == APIVersion.V3:
+            kwargs["params"] = {k: v for k, v in kwargs.get("params", {}).items() if k not in ["per_page"]}
+
         tries = 0
         while True:
             LOG.debug(f"⏳ Attempting a {method.__name__.upper()} request to {url}")

@@ -6,17 +6,8 @@ from typing import Dict, Optional
 REGEX_URL_V2 = r"^(https:\/\/api\.intra\.42\.fr|^(?!\/?v3\/|\/?freeze|\/?pace-system))(?!\/?v3\/|\/?freeze|\/?pace-system)(\/?(?:[a-zA-Z0-9_-]+\/?)*)$"
 REGEX_URL_V3 = r"^(\/?(v3\/)?(freeze|pace-system)\/(v\d)\/([\w\-\/]*))$"
 
-handler = logging.StreamHandler()
-formatter = logging.Formatter(
-    "%(asctime)s [%(levelname)8.8s] - %(module)10.10s.%(funcName)-15.15s  ||  %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-handler.setFormatter(formatter)
 
-
-LOG = logging.getLogger(__name__)
-LOG.addHandler(handler)
-LOG.setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 
 class APIVersion(Enum):
@@ -38,7 +29,7 @@ def _detect_v3(func) -> callable:
     def wrapper(self, url: str, headers: Optional[Dict] = None, **kwargs) -> callable:
         headers = headers or {}
         url = url.strip()
-        LOG.debug("======================================")
+        logger.debug("======================================")
         if re.match(REGEX_URL_V2, url):
             self.token = self.token_v2
             api_route = url.replace(self.token.endpoint, "").lstrip("/").lstrip("v2/")
@@ -47,7 +38,7 @@ def _detect_v3(func) -> callable:
             self.token = self.token_v3
             if match := re.match(REGEX_URL_V3, url):
                 url = f"https://{match.group(3)}.42.fr/api/{match.group(4)}/{match.group(5)}"
-            LOG.debug(f"Using {APIVersion.V3.value} token")
+            logger.debug(f"Using {APIVersion.V3.value} token")
         return func(self, url, headers, **kwargs)
 
     return wrapper

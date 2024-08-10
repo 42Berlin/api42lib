@@ -1,3 +1,4 @@
+import logging
 import math
 import os
 import time
@@ -10,8 +11,9 @@ import yaml
 from tqdm import tqdm
 
 from .Token import Token
-from .utils import LOG, APIVersion, _detect_v3
+from .utils import APIVersion, _detect_v3
 
+logger = logging.getLogger(__name__)
 
 class IntraAPIClient:
     verify_requests = True
@@ -42,11 +44,9 @@ class IntraAPIClient:
         working directory is used.
         - progress_bar (bool): A flag to enable or disable the progress bar during operations.
 
-        Raises:
-        - FileNotFoundError: If the specified configuration file does not exist.
         """
         if not hasattr(self, '__initialized'):
-            config = self.__load_config(config_path)
+            config = self.__load_config(config_path) or {}
             config_v2 = config.get("intra", {}).get("v2", {})
             config_v3 = config.get("intra", {}).get("v3", {})
             self.progress_bar = progress_bar
@@ -66,19 +66,18 @@ class IntraAPIClient:
         - Dict: The configuration dictionary.
 
         Raises:
-        - FileNotFoundError: If the specified configuration file does not exist.
         - ValueError: If there is an error parsing the configuration file.
         """
 
         if not config_file:
             config_file = f"{os.environ.get('PWD', '')}/config.yml"
-            LOG.debug(f"Using default config file: {config_file}")
+            logger.debug(f"Using default config file: {config_file}")
 
         try:
             with open(config_file, "r") as cfg_stream:
                 return yaml.load(cfg_stream, Loader=yaml.BaseLoader)
         except FileNotFoundError:
-            raise FileNotFoundError(f"Config file not found: {config_file}")
+            logger.debug("Not using config file")
         except yaml.YAMLError as e:
             raise ValueError(f"Error parsing config file: {e}")
 
@@ -139,7 +138,7 @@ class IntraAPIClient:
         - ValueError: If there is an error with the request (e.g., invalid URL, client/server error).
         """
 
-        LOG.debug(f"=====> API {self.token.api_version.value} Request")
+        logger.debug(f"=====> API {self.token.api_version.value} Request")
         if not self.token or not self.token.is_valid():
             self.token.request_token()
 
@@ -148,7 +147,7 @@ class IntraAPIClient:
 
         tries = 0
         while True:
-            LOG.debug(f"⏳ Attempting a {method.__name__.upper()} request to {url}")
+            logger.debug(f"⏳ Attempting a {method.__name__.upper()} request to {url}")
             res = method(
                 url,
                 headers=self.__add_auth_header(headers),
@@ -158,18 +157,18 @@ class IntraAPIClient:
 
             if res.status_code == 401:
                 if tries < 5:
-                    LOG.debug("💀 Token expired")
+                    logger.debug("💀 Token expired")
                     self.token.request_token()
                     tries += 1
                     continue
                 else:
-                    LOG.error("❌ Tried to renew token too many times, something's wrong")
+                    logger.error("❌ Tried to renew token too many times, something's wrong")
 
             elif res.status_code == 404:
                 raise ValueError(f"Invalid URL: {url}")
 
             elif res.status_code == 429:
-                LOG.info(f"🚔 Rate limit exceeded - Waiting {res.headers['Retry-After']}s before requesting again")
+                logger.info(f"🚔 Rate limit exceeded - Waiting {res.headers['Retry-After']}s before requesting again")
                 time.sleep(float(res.headers["Retry-After"]))
                 continue
 
@@ -181,7 +180,7 @@ class IntraAPIClient:
                 error_origin = "Client" if res.status_code < 500 else "Server"
                 raise ValueError(f"\n{res.headers}\n\n{error_origin}Error. Error {str(res.status_code)}\n{str(res.content)}\n{req_data}")
 
-            LOG.debug(f"✅ Request returned with code {res.status_code}")
+            logger.debug(f"✅ Request returned with code {res.status_code}")
             return res
 
     @_detect_v3
@@ -243,7 +242,7 @@ class IntraAPIClient:
             unit="page",
             disable=not self.progress_bar,
         ):
-            LOG.debug(f"Fetching page: {page}/{total_pages}")
+            logger.debug(f"Fetching page: {page}/{total_pages}")
             kwargs["params"] = kwargs.get("params", {})
             kwargs["params"]["page"] = page
             data = self.get(url=url, headers=headers, **kwargs).json()
@@ -282,7 +281,7 @@ class IntraAPIClient:
                 res = self.get(url=url, headers=headers, **local_kwargs)
                 return res.json()
             except Exception as e:
-                LOG.error(f"Error fetching page {page}: {e}")
+                logger.error(f"Error fetching page {page}: {e}")
                 return []
 
         res = self.get(url=url, headers=headers, **kwargs)
@@ -302,7 +301,7 @@ class IntraAPIClient:
         if threads <= 0:
             threads = os.cpu_count() * 3
 
-        LOG.debug(f"💻 Using {threads} threads")
+        logger.debug(f"💻 Using {threads} threads")
         with tqdm(
             total=total_pages,
             initial=1,
@@ -322,7 +321,7 @@ class IntraAPIClient:
                         elif self.token.api_version == APIVersion.V3:
                             items.extend(result.get("items", []))
                     except Exception as exc:
-                        LOG.error(f"Page {page} generated an exception: {exc}")
+                        logger.error(f"Page {page} generated an exception: {exc}")
                     pbar.update()
 
         return items
@@ -340,3 +339,35 @@ class IntraAPIClient:
         """
 
         self.progress_bar = True
+
+    def set_config(self, config: Dict) -> None:
+        """
+        Loads the token configuration for API versions V2 and V3. It should follow
+        the same structure as the configuration file, with the keys 'v2' and 'v3'.
+        e.g.:
+        {
+            "v2": {
+                "client": "client_id",
+                "secret": "client_secret",
+                "uri": "token_url",
+                "endpoint": "endpoint",
+                "scopes": "scopes",
+            },
+            "v3": {
+                "client": "client_id",
+                "secret": "client_secret",
+                "login": "login",
+                "password": "password",
+                "uri": "token_url",
+            },
+        }
+
+        Parameters:
+        - config (Dict): The configuration dictionary containing the token information.
+        """
+        config_v2 = config.get("v2", {})
+        config_v3 = config.get("v3", {})
+        if config_v2:
+            self.token_v2 = self.__create_token(config_v2, api_version=APIVersion.V2)
+        if config_v3:
+            self.token_v3 = self.__create_token(config_v3, api_version=APIVersion.V3)

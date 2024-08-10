@@ -114,5 +114,7 @@ class Token:
 
         logger.debug(f"⏳ Attempting to get a {self.api_version.value} token")
         data = requests.post(self.token_url, headers=headers, data=payload).json()
+        if data.get("error"):
+            raise Exception(f"Error while fetching token: {data['error_description']}")
         self.__set_token(data)
         logger.debug(f"🔑 Got {self.api_version.value} token -> '{self.access_token:10.10}...'")

@@ -116,3 +116,8 @@ def test_freeze_pages_threaded(client):
 def test_pace_pages_threaded_invalid_v2param(client):
     response = client.pages_threaded("/v3/pace-system/v1/paces")
     assert isinstance(response, list) and len(response) > 0
+
+def test_raise_wrong_credentials(client):
+    with pytest.raises(Exception):
+        client.token_v3.client_id = "wrong"
+        client.token_v3.request_token()

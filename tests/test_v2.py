@@ -99,3 +99,9 @@ def test_pages_threaded(client):
     params = {"filter[pool_month]": "october"}
     response = client.pages("campus/berlin/users", params=params)
     assert isinstance(response, list) and len(response) > 0
+
+
+def test_raise_wrong_credentials(client):
+    with pytest.raises(Exception):
+        client.token_v2.client_id = "wrong"
+        client.token_v2.request_token()

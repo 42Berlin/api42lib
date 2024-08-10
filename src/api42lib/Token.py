@@ -1,3 +1,4 @@
+import logging
 from base64 import b64encode
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -5,8 +6,9 @@ from typing import Dict, Optional
 
 import requests
 
-from .utils import LOG, APIVersion
+from .utils import APIVersion
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Token:
@@ -88,10 +90,10 @@ class Token:
         """
 
         if self.access_token is None or self.expires_at is None:
-            LOG.debug("⏳ No valid token found. Fetching new one")
+            logger.debug("⏳ No valid token found. Fetching new one")
             return False
         if self.expires_at < datetime.now(timezone.utc):
-            LOG.debug(f"💀 Token {self.api_version.value} expired. Fetching new one")
+            logger.debug(f"💀 Token {self.api_version.value} expired. Fetching new one")
             return False
         return True
 
@@ -110,7 +112,7 @@ class Token:
             ),
         }
 
-        LOG.debug(f"⏳ Attempting to get a {self.api_version.value} token")
+        logger.debug(f"⏳ Attempting to get a {self.api_version.value} token")
         data = requests.post(self.token_url, headers=headers, data=payload).json()
         self.__set_token(data)
-        LOG.debug(f"🔑 Got {self.api_version.value} token -> '{self.access_token:10.10}...'")
+        logger.debug(f"🔑 Got {self.api_version.value} token -> '{self.access_token:10.10}...'")

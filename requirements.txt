@@ -6,3 +6,4 @@ urllib3<2
 pytest~=8.2
 build~=1.2
 twine~=5.1
+colorlog~=6.8

@@ -10,6 +10,7 @@ from .utils import APIVersion
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class Token:
     client_id: Optional[str] = None
@@ -19,6 +20,7 @@ class Token:
     scopes: Optional[str] = None
     login: Optional[str] = None
     password: Optional[str] = None
+    otp: Optional[str] = None
     api_version: Optional[APIVersion] = None
     is_v3: bool = False
     access_token: Optional[str] = None
@@ -42,9 +44,10 @@ class Token:
         self.access_token = res.get("access_token", self.access_token)
         self.created_at = now_utc
         self.expires_in = int(res.get("expires_in", 0))
+        self.otp = res.get("otp", self.otp)
         self.expires_at = self.created_at + timedelta(seconds=self.expires_in)
         self.refresh_token = res.get("refresh_token", self.refresh_token)
-        self.refresh_expires_in = int(res.get("expires_in", 0))
+        self.refresh_expires_in = int(res.get("refresh_expires_in", 0))
         self.refresh_expires_at = now_utc + timedelta(seconds=self.refresh_expires_in)
 
     def __set_payload_v2(self) -> Dict:
@@ -79,6 +82,7 @@ class Token:
             "grant_type": "password",
             "username": self.login,
             "password": self.password,
+            **({"otp": self.otp} if self.otp else {}),
         }
 
     def is_valid(self) -> bool:
@@ -113,8 +117,20 @@ class Token:
         }
 
         logger.debug(f"⏳ Attempting to get a {self.api_version.value} token")
-        data = requests.post(self.token_url, headers=headers, data=payload).json()
-        if data.get("error"):
-            raise Exception(f"Error while fetching token: {data['error_description']}")
+        res = requests.post(self.token_url, headers=headers, data=payload)
+        if res.status_code == 401:
+            raise Exception(
+                f"Probably invalid client_id, client_secret or OTP code: {res.text}"
+            )
+        elif res.status_code != 200:
+            raise Exception(f"Error while fetching token: {res.text}")
+
+        try:
+            data = res.json()
+        except Exception as e:
+            raise Exception(f"Error while parsing token response: {e}")
+
         self.__set_token(data)
-        logger.debug(f"🔑 Got {self.api_version.value} token -> '{self.access_token:10.10}...'")
+        logger.debug(
+            f"🔑 Got {self.api_version.value} token -> '{self.access_token:10.10}...'"
+        )

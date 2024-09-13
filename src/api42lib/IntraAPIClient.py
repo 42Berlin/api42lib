@@ -15,6 +15,7 @@ from .utils import APIVersion, _detect_v3
 
 logger = logging.getLogger(__name__)
 
+
 class IntraAPIClient:
     verify_requests = True
     __instance = None
@@ -31,7 +32,9 @@ class IntraAPIClient:
             cls.__instance = super(IntraAPIClient, cls).__new__(cls)
         return cls.__instance
 
-    def __init__(self, config_path: Optional[str] = None, progress_bar: bool = True) -> None:
+    def __init__(
+        self, config_path: Optional[str] = None, progress_bar: bool = True
+    ) -> None:
         """
         Initializes the IntraAPIClient instance.
 
@@ -45,7 +48,7 @@ class IntraAPIClient:
         - progress_bar (bool): A flag to enable or disable the progress bar during operations.
 
         """
-        if not hasattr(self, '__initialized'):
+        if not hasattr(self, "__initialized"):
             config = self.__load_config(config_path) or {}
             config_v2 = config.get("intra", {}).get("v2", {})
             config_v3 = config.get("intra", {}).get("v3", {})
@@ -81,7 +84,9 @@ class IntraAPIClient:
         except yaml.YAMLError as e:
             raise ValueError(f"Error parsing config file: {e}")
 
-    def __create_token(self, config: Dict, api_version: Optional[APIVersion] = None) -> Token:
+    def __create_token(
+        self, config: Dict, api_version: Optional[APIVersion] = None
+    ) -> Token:
         """
         Creates a Token instance based on the given configuration and API version.
 
@@ -100,6 +105,7 @@ class IntraAPIClient:
             scopes=config.get("scopes", None),
             login=config.get("login", None),
             password=config.get("password", None),
+            otp=config.get("otp", None),
             endpoint=config.get("endpoint", None),
             api_version=api_version,
         )
@@ -120,7 +126,9 @@ class IntraAPIClient:
         headers["Authorization"] = f"Bearer {self.token.access_token}"
         return headers
 
-    def __request(self, method: callable, url: str, headers: Optional[Dict] = None, **kwargs) -> requests.Response:
+    def __request(
+        self, method: callable, url: str, headers: Optional[Dict] = None, **kwargs
+    ) -> requests.Response:
         """
         Makes an API request with the given method, URL, headers, and additional parameters.
         Handles token expiration, rate limits, and errors.
@@ -143,7 +151,11 @@ class IntraAPIClient:
             self.token.request_token()
 
         if self.token.api_version == APIVersion.V3:
-            kwargs["params"] = {k: v for k, v in kwargs.get("params", {}).items() if k not in ["per_page"]}
+            kwargs["params"] = {
+                k: v
+                for k, v in kwargs.get("params", {}).items()
+                if k not in ["per_page"]
+            }
 
         tries = 0
         while True:
@@ -162,13 +174,17 @@ class IntraAPIClient:
                     tries += 1
                     continue
                 else:
-                    logger.error("❌ Tried to renew token too many times, something's wrong")
+                    logger.error(
+                        "❌ Tried to renew token too many times, something's wrong"
+                    )
 
             elif res.status_code == 404:
                 raise ValueError(f"Invalid URL: {url}")
 
             elif res.status_code == 429:
-                logger.info(f"🚔 Rate limit exceeded - Waiting {res.headers['Retry-After']}s before requesting again")
+                logger.info(
+                    f"🚔 Rate limit exceeded - Waiting {res.headers['Retry-After']}s before requesting again"
+                )
                 time.sleep(float(res.headers["Retry-After"]))
                 continue
 
@@ -178,29 +194,41 @@ class IntraAPIClient:
                     "\n" + str(kwargs["params"]) if "params" in kwargs.keys() else "",
                 )
                 error_origin = "Client" if res.status_code < 500 else "Server"
-                raise ValueError(f"\n{res.headers}\n\n{error_origin}Error. Error {str(res.status_code)}\n{str(res.content)}\n{req_data}")
+                raise ValueError(
+                    f"\n{res.headers}\n\n{error_origin}Error. Error {str(res.status_code)}\n{str(res.content)}\n{req_data}"
+                )
 
             logger.debug(f"✅ Request returned with code {res.status_code}")
             return res
 
     @_detect_v3
-    def get(self, url: str, headers: Optional[Dict] = None, **kwargs) -> requests.Response:
+    def get(
+        self, url: str, headers: Optional[Dict] = None, **kwargs
+    ) -> requests.Response:
         return self.__request(requests.get, url, headers, **kwargs)
 
     @_detect_v3
-    def post(self, url: str, headers: Optional[Dict] = None, **kwargs) -> requests.Response:
+    def post(
+        self, url: str, headers: Optional[Dict] = None, **kwargs
+    ) -> requests.Response:
         return self.__request(requests.post, url, headers, **kwargs)
 
     @_detect_v3
-    def patch(self, url: str, headers: Optional[Dict] = None, **kwargs) -> requests.Response:
+    def patch(
+        self, url: str, headers: Optional[Dict] = None, **kwargs
+    ) -> requests.Response:
         return self.__request(requests.patch, url, headers, **kwargs)
 
     @_detect_v3
-    def put(self, url: str, headers: Optional[Dict] = None, **kwargs) -> requests.Response:
+    def put(
+        self, url: str, headers: Optional[Dict] = None, **kwargs
+    ) -> requests.Response:
         return self.__request(requests.put, url, headers, **kwargs)
 
     @_detect_v3
-    def delete(self, url: str, headers: Optional[Dict] = None, **kwargs) -> requests.Response:
+    def delete(
+        self, url: str, headers: Optional[Dict] = None, **kwargs
+    ) -> requests.Response:
         return self.__request(requests.delete, url, headers, **kwargs)
 
     def pages(self, url: str, headers: Optional[Dict] = None, **kwargs) -> list:
@@ -227,7 +255,10 @@ class IntraAPIClient:
             if "X-Total" not in res.headers:
                 return items
             initial_page = int(res.headers.get("X-Page", 1))
-            total_pages = math.ceil(int(res.headers.get("X-Total", 1)) / int(res.headers.get("X-Per-Page", 1)))
+            total_pages = math.ceil(
+                int(res.headers.get("X-Total", 1))
+                / int(res.headers.get("X-Per-Page", 1))
+            )
         elif self.token.api_version == APIVersion.V3:
             data = res.json()
             items = data.get("items", [])
@@ -253,7 +284,15 @@ class IntraAPIClient:
 
         return items
 
-    def pages_threaded(self, url: str, headers: Optional[Dict] = None, stop_page: Optional[int] = None, threads: int = 0, thread_timeout: int = 15, **kwargs) -> list:
+    def pages_threaded(
+        self,
+        url: str,
+        headers: Optional[Dict] = None,
+        stop_page: Optional[int] = None,
+        threads: int = 0,
+        thread_timeout: int = 15,
+        **kwargs,
+    ) -> list:
         """
         Fetches pages of data concurrently using multiple threads.
 
@@ -310,7 +349,10 @@ class IntraAPIClient:
             disable=not self.progress_bar,
         ) as pbar:
             with ThreadPoolExecutor(max_workers=threads) as executor:
-                future_to_page = {executor.submit(_page_thread, page): page for page in range(2, total_pages + 1)}
+                future_to_page = {
+                    executor.submit(_page_thread, page): page
+                    for page in range(2, total_pages + 1)
+                }
 
                 for future in as_completed(future_to_page):
                     page = future_to_page[future]
@@ -371,3 +413,23 @@ class IntraAPIClient:
             self.token_v2 = self.__create_token(config_v2, api_version=APIVersion.V2)
         if config_v3:
             self.token_v3 = self.__create_token(config_v3, api_version=APIVersion.V3)
+
+    def set_v3_credentials(self, login: str, password: str) -> None:
+        """
+        Sets the login and password for the V3 token.
+
+        Parameters:
+        - login (str): The login to set.
+        - password (str): The password to set.
+        """
+        self.token_v3.login = login
+        self.token_v3.password = password
+
+    def set_v3_otp(self, otp: str) -> None:
+        """
+        Sets the OTP value for the V3 token.
+
+        Parameters:
+        - otp (str): The OTP value to set.
+        """
+        self.token_v3.otp = otp

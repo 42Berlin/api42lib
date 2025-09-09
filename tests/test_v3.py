@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
+
 from api42lib import IntraAPIClient
 
 ic = IntraAPIClient(progress_bar=False)
@@ -104,18 +105,19 @@ def test_request_with_expired_token(client):
 
 
 def test_pages(client):
-    response = client.pages("/v3/freeze/v2/freezes")
+    response = client.pages("/v3/freeze/v2/freezes", stop_page=4)
     assert isinstance(response, list) and len(response) > 0
 
 
 def test_freeze_pages_threaded(client):
-    response = client.pages_threaded("/v3/freeze/v2/freezes")
+    response = client.pages_threaded("/v3/freeze/v2/freezes", stop_page=4)
     assert isinstance(response, list) and len(response) > 0
 
 
 def test_pace_pages_threaded_invalid_v2param(client):
-    response = client.pages_threaded("/v3/pace-system/v1/paces")
+    response = client.pages_threaded("/v3/pace-system/v1/paces", stop_page=4)
     assert isinstance(response, list) and len(response) > 0
+
 
 def test_raise_wrong_credentials(client):
     with pytest.raises(Exception):

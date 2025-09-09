@@ -33,7 +33,12 @@ class IntraAPIClient:
         return cls.__instance
 
     def __init__(
-        self, config_path: Optional[str] = None, progress_bar: bool = True
+        self,
+        config_path: Optional[str] = None,
+        progress_bar: bool = True,
+        request_timeout: Optional[float] = 30.0,
+        retry_on_5xx: bool = True,
+        server_max_retries: int = 5,
     ) -> None:
         """
         Initializes the IntraAPIClient instance.
@@ -53,6 +58,9 @@ class IntraAPIClient:
             config_v2 = config.get("intra", {}).get("v2", {})
             config_v3 = config.get("intra", {}).get("v3", {})
             self.progress_bar = progress_bar
+            self.request_timeout = request_timeout
+            self.retry_on_5xx = retry_on_5xx
+            self.server_max_retries = max(0, int(server_max_retries))
             self.token: Optional[Token] = None
             self.token_v2 = self.__create_token(config_v2, api_version=APIVersion.V2)
             self.token_v3 = self.__create_token(config_v3, api_version=APIVersion.V3)
@@ -157,21 +165,35 @@ class IntraAPIClient:
                 if k not in ["per_page"]
             }
 
-        tries = 0
+        token_tries = 0
+        server_tries = 0
         while True:
             logger.debug(f"⏳ Attempting a {method.__name__.upper()} request to {url}")
-            res = method(
-                url,
-                headers=self.__add_auth_header(headers),
-                verify=self.verify_requests,
-                **kwargs,
-            )
+            try:
+                if self.request_timeout is not None and "timeout" not in kwargs:
+                    kwargs["timeout"] = self.request_timeout
+                res = method(
+                    url,
+                    headers=self.__add_auth_header(headers),
+                    verify=self.verify_requests,
+                    **kwargs,
+                )
+            except (requests.Timeout, requests.ConnectionError) as e:
+                if self.retry_on_5xx and server_tries < self.server_max_retries:
+                    wait = 2**server_tries
+                    logger.info(
+                        f"🌐 Transient error ({type(e).__name__}). Retrying in {wait:.1f}s ({server_tries + 1}/{self.server_max_retries})"
+                    )
+                    time.sleep(wait)
+                    server_tries += 1
+                    continue
+                raise
 
             if res.status_code == 401:
-                if tries < 5:
+                if token_tries < 5:
                     logger.debug("💀 Token expired")
                     self.token.request_token()
-                    tries += 1
+                    token_tries += 1
                     continue
                 else:
                     logger.error(
@@ -187,6 +209,23 @@ class IntraAPIClient:
                 )
                 time.sleep(float(res.headers["Retry-After"]))
                 continue
+
+            elif 500 <= res.status_code < 600:
+                if self.retry_on_5xx and server_tries < self.server_max_retries:
+                    retry_after = res.headers.get("Retry-After")
+                    if retry_after is not None:
+                        try:
+                            wait = float(retry_after)
+                        except ValueError:
+                            wait = 2**server_tries
+                    else:
+                        wait = 2**server_tries
+                    logger.info(
+                        f"🛠️ Server error {res.status_code}. Retrying in {wait:.1f}s ({server_tries + 1}/{self.server_max_retries})"
+                    )
+                    time.sleep(wait)
+                    server_tries += 1
+                    continue
 
             if res.status_code >= 400:
                 req_data = "{}{}".format(
@@ -231,7 +270,13 @@ class IntraAPIClient:
     ) -> requests.Response:
         return self.__request(requests.delete, url, headers, **kwargs)
 
-    def pages(self, url: str, headers: Optional[Dict] = None, **kwargs) -> list:
+    def pages(
+        self,
+        url: str,
+        headers: Optional[Dict] = None,
+        stop_page: Optional[int] = None,
+        **kwargs,
+    ) -> list:
         """
         Fetches all pages of data sequentially from the specified URL.
 
@@ -264,6 +309,9 @@ class IntraAPIClient:
             items = data.get("items", [])
             initial_page = data.get("page", 1)
             total_pages = data.get("pages", 1)
+
+        if stop_page:
+            total_pages = min(total_pages, stop_page)
 
         for page in tqdm(
             range(initial_page + 1, total_pages + 1),

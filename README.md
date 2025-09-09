@@ -79,11 +79,11 @@ You can explore the API Documentation and available endpoints [here](https://api
 
 
 ## Installation
-We recommend using a virtual environment. We use [Poetry](https://python-poetry.org/) for dependency management, but you can use any other package manager you prefer.
+We recommend using a virtual environment. We use [UV](https://docs.astral.sh/uv/) for dependency management, but you can use any other package manager you prefer.
 
-Run the following command to install the package with Poetry:
+Run the following command to install the package with UV:
 ```bash
-poetry add api42lib
+uv add api42lib
 ```
 
 If you prefer to use pip, you can install the package with the following command:
@@ -216,10 +216,11 @@ Spot an Error? Want to Contribute? Submit a pull request to fix or add features!
 
 To develop your own changes clone this repository, make changes and install the package locally to test it:
 ```bash
-pip install .
+uv sync --dev
+
 ```
 
 You can run all tests with pytest (make sure to have pytest installed first):
 ```bash
-pytest
+uv run pytest
 ```
